@@ -186,13 +186,8 @@ void UPRG_PluginRoomTool::OnPropertyModified(UObject* PropertySet, FProperty* Pr
 					DeleteRoom(RoomArrayCopy[i-1]);
 			}
 			// 2. Delete a Removed or cleared ArrayRoom entry
-			// TODO: Update RoomArray if Room is deleted in the map => HANDLE IN ROOM DESTRUCTOR
-			//			 But how to retain isolation of Room towards Tool then?
-			//			 Add a listener in Tool when Room is destroyed?!
 			else if (RoomArraySize >= Properties->RoomArray.Num())
 			{
-				// Find entry that has been deleted from RoomArray
-				// If an entry is cleared instead, this is handled in DeleteRoom
 				for (APRG_Room* RoomCopy : RoomArrayCopy)
 				{
 					if (!Properties->RoomArray.Contains(RoomCopy))
@@ -503,7 +498,6 @@ void UPRG_PluginRoomTool::ResetRoomEditMode(EEditMode EditMode)
 void UPRG_PluginRoomTool::SetRoomEditMode()
 {
 	// Only spawn temporary actors if there is a room available
-	//		TODO: BLOCK EditWall/EditTiles IF NO ROOM EXISTS, EXIT OUT OF EditWalls/EditTiles IF LAST ROOM IS REMOVED
 	if (auto ActiveRoom = TryFetchCurrentRoom())
 	{
 		if (Properties->EditMode == EEditMode::EditWalls)
@@ -590,24 +584,25 @@ void UPRG_PluginRoomTool::SpawnRoomBoundingBox()
 	if (CurrentBoundingBox && CurrentBoundingBox->GetAttachParentActor() == CurrentRoom)
 		return;
 
-	auto ActiveRoom = TryFetchCurrentRoom();
+	if (auto ActiveRoom = TryFetchCurrentRoom())
+	{
+		// Get room size. Has XY in tiles, so convert these to meters
+		FVector RoomSize = ActiveRoom->GetRoomSize();
+		RoomSize.X *= Properties->TileSize;
+		RoomSize.Y *= Properties->TileSize;
+		FVector SpawnScale = RoomSize + 0.1f;
+		FVector CenterOffset = RoomSize * 50.0f; // M to CM, divided by 2 for center
 
-	// Get room size. Has XY in tiles, so convert these to meters
-	FVector RoomSize = ActiveRoom->GetRoomSize();
-	RoomSize.X *= Properties->TileSize;
-	RoomSize.Y *= Properties->TileSize;
-	FVector SpawnScale = RoomSize + 0.1f;
-	FVector CenterOffset = RoomSize * 50.0f; // M to CM, divided by 2 for center
+		FTransform SpawnTransform = FTransform(FRotator(0.0f, 0.0f, 0.0f), CenterOffset, SpawnScale);
+		FActorSpawnParameters SpawnInfoTile;
+		TObjectPtr<ARoomBounds> NewActor = GetWorld()->SpawnActor<ARoomBounds>(ARoomBounds::StaticClass(), SpawnTransform, SpawnInfoTile);
+		NewActor->AttachToActor(ActiveRoom, FAttachmentTransformRules::KeepRelativeTransform);
 
-	FTransform SpawnTransform = FTransform(FRotator(0.0f, 0.0f, 0.0f), CenterOffset, SpawnScale);
-	FActorSpawnParameters SpawnInfoTile;
-	TObjectPtr<ARoomBounds> NewActor = GetWorld()->SpawnActor<ARoomBounds>(ARoomBounds::StaticClass(), SpawnTransform, SpawnInfoTile);
-	NewActor->AttachToActor(ActiveRoom, FAttachmentTransformRules::KeepRelativeTransform);
+		NewActor->GetStaticMeshComponent()->SetStaticMesh(NewActor->CubeMesh);
+		SetMaterial(NewActor, NewActor->CubeMaterial);
 
-	NewActor->GetStaticMeshComponent()->SetStaticMesh(NewActor->CubeMesh);
-	SetMaterial(NewActor, NewActor->CubeMaterial);
-
-	CurrentBoundingBox = NewActor;
+		CurrentBoundingBox = NewActor;
+	}
 }
 
 // Remove the selection bounding box for the current room
