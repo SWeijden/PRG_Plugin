@@ -64,7 +64,7 @@ public:
 	// Get gizmo
 	TObjectPtr<UCombinedTransformGizmo> GetRoomGizmo();
 	// Destroy gizmo.
-	void DestroyRoomGizmo(UInteractiveGizmoManager* GizmoManager);
+	void RemoveRoomGizmo(UInteractiveGizmoManager* GizmoManager);
 
 	// Get array of persistent walls of room
 	TArray<TObjectPtr<AWall>>& GetWalls();
@@ -103,15 +103,15 @@ protected:
 	TObjectPtr<UTransformProxy> ProxyTransform;
 
 	// Room size in tile count
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "Room")
 	FIntPoint RoomSize = { 1, 1 };
 	// Room height in meters
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "Room")
 	int RoomHeight = 1;
 
 private:
 	// Root component
-	UPROPERTY(EditAnywhere)
+	UPROPERTY(EditAnywhere, Category = "Room")
 	USceneComponent* BaseComponent;
 
 	// Array of all possible walls within a room

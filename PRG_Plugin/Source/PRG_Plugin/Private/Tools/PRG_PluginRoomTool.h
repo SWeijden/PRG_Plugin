@@ -85,39 +85,50 @@ public:
 	UPRG_PluginRoomToolProperties();
 
 	// Select editing mode
-	UPROPERTY(EditAnywhere, Category = Options, meta = (DisplayName = "Edit mode"))
+	UPROPERTY(EditAnywhere, Category = "Options", meta = (DisplayName = "Edit mode"))
 	EEditMode EditMode;
 	// Snap rooms to the selected intervals
-	UPROPERTY(EditAnywhere, Category = Options, meta = (DisplayName = "Position snapping (cm)"))
+	UPROPERTY(EditAnywhere, Category = "Options", meta = (DisplayName = "Position snapping (cm)"))
 	EPosSnap PositionSnap;
 	// Snap rooms to the selected rotations
-	UPROPERTY(EditAnywhere, Category = Options, meta = (DisplayName = "Rotation snapping (deg)"))
+	UPROPERTY(EditAnywhere, Category = "Options", meta = (DisplayName = "Rotation snapping (deg)"))
 	ERotSnap RotationSnap;
 	// Toggle visibility of room gizmo's
-	UPROPERTY(EditAnywhere, Category = Options, meta = (DisplayName = "Show All Gizmos"))
+	UPROPERTY(EditAnywhere, Category = "Options", meta = (DisplayName = "Show All Gizmos"))
 	bool ShowAllGizmos;
+	// Reset the floor of a room
+	UPROPERTY(EditAnywhere, Category = "Options|Reset Floor", meta = (DisplayName = "Reset Room Floor", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	bool ResetRoomFloor;
+	// Reset the floor of a room
+	UPROPERTY(EditAnywhere, Category = "Options|Reset Floor", meta = (DisplayName = "Clear Room Floor", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	bool ClearRoomFloor;
+	// Reset the walls of a room
+	UPROPERTY(EditAnywhere, Category = "Options|Reset Walls", meta = (DisplayName = "Reset Room Walls", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	bool ResetRoomWalls;
+	// Reset the walls of a room
+	UPROPERTY(EditAnywhere, Category = "Options|Reset Walls", meta = (DisplayName = "Clear Room Walls", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	bool ClearRoomWalls;
 
 	// Initial room size on spawn
-	UPROPERTY(EditAnywhere, Category = Data, meta = (DisplayName = "Room tiles", NoResetToDefault, ClampMin = "1", ClampMax = "50", UIMin = "1", UIMax = "50", EditCondition = "EditMode == EEditMode::CreateRooms || EditMode == EEditMode::ManageRooms"))
+	UPROPERTY(EditAnywhere, Category = "Data", meta = (DisplayName = "Room tiles", NoResetToDefault, ClampMin = "1", ClampMax = "50", UIMin = "1", UIMax = "50", EditCondition = "EditMode == EEditMode::CreateRooms || EditMode == EEditMode::ManageRooms"))
 	FIntPoint RoomSize;
-	// Toggle visibility of room gizmo's
+	// Set scale of room gizmo's
 	/*UPROPERTY(EditAnywhere, Category = Data, meta = (DisplayName = "Gizmos Scale", ClampMin = "0.05", ClampMax = "2.0", UIMin = "0.05", UIMax = "2.0"))
 	float GizmoScale;*/
+	// Coordinates of where a new room will be spawned
+	UPROPERTY(EditAnywhere, Category = "Data|Spawn Room", meta = (DisplayName = "Spawn Position", EditCondition = "EditMode == EEditMode::CreateRooms"))
+	FVector SpawnPosition;
 	// Room height used for displaying the room selection box
-	UPROPERTY(EditAnywhere, Category = Data, meta = (DisplayName = "Room height (m)", ClampMin = "1", ClampMax = "20", UIMin = "1", UIMax = "20", EditCondition = "EditMode == EEditMode::CreateRooms || EditMode == EEditMode::ManageRooms"))
+	UPROPERTY(EditAnywhere, Category = "Data|Spawn Room", meta = (DisplayName = "Room height(m)", ClampMin = "1", ClampMax = "20", UIMin = "1", UIMax = "20", EditCondition = "EditMode == EEditMode::CreateRooms"))
 	int InitHeight;
 	// Size of each tile
-	UPROPERTY(EditAnywhere, Category = Data, meta = (DisplayName = "Tile size (m)", ClampMin = "1", ClampMax = "100", UIMin = "1", UIMax = "10", EditCondition = "EditMode == EEditMode::CreateRooms"))
+	UPROPERTY(EditAnywhere, Category = "Data|Spawn Room", meta = (DisplayName = "Tile size (m)", ClampMin = "1", ClampMax = "100", UIMin = "1", UIMax = "10", EditCondition = "EditMode == EEditMode::CreateRooms"))
 	int TileSize;
-	// Indicator of where a new room will be spawned
-	//		TODO: SUPPLEMENT OR REPLACE WITH A MARKER IN VIEWPORT?
-	UPROPERTY(EditAnywhere, Category = Data, meta = (DisplayName = "Spawn Position", EditCondition = "EditMode == EEditMode::CreateRooms"))
-	FVector SpawnPosition;
 	// Mesh used to spawn new tiles with when spawning a new room
-	UPROPERTY(EditAnywhere, Category = Data, meta = (DisplayName = "Floor Object", EditCondition = "EditMode == EEditMode::CreateRooms || EditMode == EEditMode::ManageRooms || EditMode == EEditMode::EditTiles"))
+	UPROPERTY(EditAnywhere, Category = "Data|Objects", meta = (DisplayName = "Floor Object", EditCondition = "EditMode == EEditMode::CreateRooms || EditMode == EEditMode::ManageRooms || EditMode == EEditMode::EditTiles"))
 	TObjectPtr<UStaticMesh> FloorMesh;
 	// Mesh used to spawn new walls with when spawning a new room
-	UPROPERTY(EditAnywhere, Category = Data, meta = (DisplayName = "Wall Object", EditCondition = "EditMode == EEditMode::CreateRooms || EditMode == EEditMode::ManageRooms || EditMode == EEditMode::EditWalls"))
+	UPROPERTY(EditAnywhere, Category = "Data|Objects", meta = (DisplayName = "Wall Object", EditCondition = "EditMode == EEditMode::CreateRooms || EditMode == EEditMode::ManageRooms || EditMode == EEditMode::EditWalls"))
 	TObjectPtr<UStaticMesh> WallMesh;
 
 	// Provide option to select a room from the scene
@@ -150,8 +161,8 @@ public:
 };
 
 /**
- * UPRG_PluginRoomTool is an example Tool that opens a message box displaying info about an actor that the user
- * clicks left mouse button. All the action is in the ::OnClicked handler.
+ * UPRG_PluginRoomTool is an Tool that allows the user to create and manage procedurally created rooms
+ * Functionality changes depending on the selected edit mode
  */
 UCLASS()
 class PRG_PLUGIN_API UPRG_PluginRoomTool : public USingleClickTool
@@ -186,6 +197,14 @@ protected:
 	void FindRoomsInScene();
 	// Create and store a new room
 	void SpawnRoom();
+	// Set room to have all floor tiles filled
+	void SetRoomFloorDefault(TObjectPtr<APRG_Room> SetRoom);
+	// Set room to have only exterior walls
+	void SetRoomWallsDefault(TObjectPtr<APRG_Room> SetRoom);
+	// Set room to have all floor tiles filled
+	void ClearRoomFloor(TObjectPtr<APRG_Room> SetRoom);
+	// Set room to have only exterior walls
+	void ClearRoomWalls(TObjectPtr<APRG_Room> SetRoom);
 	// Setup room found in the scene
 	void SetupFoundRoom(TObjectPtr<APRG_Room> addRoom);
 	// Change the size of the current room
@@ -198,7 +217,7 @@ protected:
 	void DeleteTempActors();
 
 	// Create a room gizmo
-	void CreateRoomGizmo(TObjectPtr<APRG_Room> room, bool loadTransform);
+	void CreateCustomRoomGizmo(TObjectPtr<APRG_Room> room, bool loadTransform);
 	// Handle when a gizmo is moved. Listens to OnTransformChanged on TransformProxy
 	void GizmoTransformChanged(UTransformProxy* Proxy, FTransform Transform);
 	// Toggle visibility of room gizmo's
@@ -230,31 +249,35 @@ private:
 	// Remove the bounding box for the currently selected room
 	void RemoveRoomBoundingBox();
 
+	void SpawnCreateRoomGizmo();
+	void UpdateCreateRoomGizmo(FVector NewPos);
+	void RemoveCreateRoomGizmo();
+
 	// Reset variables to initial tool state
 	void ResetToolState();
 
 protected:
 	// Handle edit mode interaction with valid actors OnClick
 	template <class T>
-	void OnClickEditMode(EEditMode EditMode, FHitResult& TraceResult, TArray<TObjectPtr<T>>& TempArray, TArray<TObjectPtr<T>>& PersistArray)
+	void OnClickEditModeInteraction(EEditMode EditMode, FHitResult& TraceResult, TArray<TObjectPtr<T>>& TempArray, TArray<TObjectPtr<T>>& PersistArray)
 	{
 		if (auto ActiveRoom = TryGetCurrentRoom())
 		{
 			TObjectPtr<T> FoundActor = static_cast<T*>(TraceResult.GetActor());
 
-			// 1. Toggle between temporary and persistent mode
+			// 1. Toggle selected object between temporary and persistent arrays
 			if (CurrentSelectedActorInRoom.Value == FoundActor)
 			{
 				TogglePersistance(TempArray, PersistArray);
 			}
-			// 2. Set active selection. Check if current selection is part of current room OR initial selection of current room
+			// 2. Set selected object to traced object if of matching type. Check if current selection is part of current room OR initial selection of current room
 			else if (CurrentSelectedActorInRoom.Value && CurrentSelectedActorInRoom.Value->GetAttachParentActor() == FoundActor->GetAttachParentActor() ||
 				TempArray.Contains(FoundActor) || PersistArray.Contains(FoundActor))
 			{
 				DeselectPriorActor(TempArray, PersistArray);
 				SetSelectedActorInRoom(TempArray, PersistArray, ActiveRoom, FoundActor);
 			}
-			// 3. Switch selection to new room
+			// 3. Switch selection to new room when trace hits object of an unselected room
 			else
 			{
 				DeselectPriorActor(TempArray, PersistArray);
@@ -275,7 +298,7 @@ protected:
 		}
 	}
 
-	// Toggle current actor persistance state, switching between temp and peristent arrays
+	// Toggle current actor persistance state, switching selected object between temp and peristent arrays
 	template <class T>
 	void TogglePersistance(TArray<TObjectPtr<T>>& TempArray, TArray<TObjectPtr<T>>& PersistArray)
 	{
@@ -386,6 +409,10 @@ protected:
 	TObjectPtr<UCombinedTransformGizmo> TransformGizmo = nullptr;
 	UPROPERTY()
 	TObjectPtr<UTransformProxy> TransformProxy = nullptr;
+	UPROPERTY()
+	TObjectPtr<UCombinedTransformGizmo> SpawnGizmo = nullptr;
+	UPROPERTY()
+	TObjectPtr<UTransformProxy> SpawnProxy = nullptr;
 
 	/** Target World we will raycast into to find actors */
 	UWorld* TargetWorld = nullptr;
@@ -402,6 +429,8 @@ private:
 	// Array of stored original Materials used in EditMode::EditWalls or EditMode::EditTiles
 	TArray<TArray<TObjectPtr<UMaterial>>> OriginalMaterials;
 
+	// Last active Room
+	TObjectPtr<APRG_Room> LastActiveRoom = nullptr;
 	// Currently active Room
 	TObjectPtr<APRG_Room> CurrentRoom = nullptr;
 	// Bounding box of active Room
@@ -414,7 +443,7 @@ private:
 	// RoomArray size. Required to handle changes in OnPropertyModified
 	int RoomArraySize = 0;
 
-	// Separates UI in meters from internal calculations requiring more precision
+	// Tile size internal. Separates UI in meters from internal calculations requiring more precision
 	int TileSizeCM = 200;
 };
 

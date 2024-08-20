@@ -48,6 +48,10 @@ UPRG_PluginRoomToolProperties::UPRG_PluginRoomToolProperties()
 	PositionSnap = EPosSnap::SnapX10;
 	RoomSize = { 3, 2 };
 	ShowAllGizmos = true;
+	ResetRoomFloor = false;
+	ClearRoomFloor = false;
+	ResetRoomWalls = false;
+	ClearRoomWalls = false;
 	//GizmoScale = 1.0f;
 	InitHeight = 2;
 	TileSize = 2;
@@ -117,10 +121,16 @@ void UPRG_PluginRoomTool::Setup()
 
 	FindRoomsInScene();
 	ToggleGizmoVisibility(Properties->ShowAllGizmos);
+
+	SpawnCreateRoomGizmo();
 }
 
 void UPRG_PluginRoomTool::Shutdown(EToolShutdownType ShutdownType)
 {
+	if (LastActiveRoom)
+
+
+
 	DeleteTempActors();
 	ResetPersistMaterials(Properties->EditMode);
 
@@ -165,7 +175,7 @@ void UPRG_PluginRoomTool::OnPropertyModified(UObject* PropertySet, FProperty* Pr
 			PRGSettings->MarkPackageDirty();
 		}
 	}
-	// Struct - RoomSize
+	// Struct - SpawnPosition
 	else if (Property->IsA(FStructProperty::StaticClass()))
 	{
 		if (Property->GetFName() == "SpawnPosition")
@@ -174,7 +184,7 @@ void UPRG_PluginRoomTool::OnPropertyModified(UObject* PropertySet, FProperty* Pr
 			PRGSettings->MarkPackageDirty();
 		}
 	}
-	// Bool - ShowAllGizmos
+	// Bool - ShowAllGizmos, ResetRoomFloor, ClearRoomFloor, ResetRoomWalls, ClearRoomWalls
 	else if (Property->IsA(FBoolProperty::StaticClass()))
 	{
 		if (Property->GetFName() == "ShowAllGizmos")
@@ -182,6 +192,42 @@ void UPRG_PluginRoomTool::OnPropertyModified(UObject* PropertySet, FProperty* Pr
 			ToggleGizmoVisibility(Properties->ShowAllGizmos);
 			PRGSettings->ShowAllGizmos = Properties->ShowAllGizmos;
 			PRGSettings->MarkPackageDirty();
+		}
+		else if (Property->GetFName() == "ResetRoomFloor")
+		{
+			// Only reset with an already selected current room
+			if (CurrentRoom && Properties->ResetRoomFloor)
+			{
+				ClearRoomFloor(CurrentRoom);
+				SetRoomFloorDefault(CurrentRoom);
+			}
+			Properties->ResetRoomFloor = false;
+		}
+		else if (Property->GetFName() == "ClearRoomFloor")
+		{
+			// Only reset with an already selected current room
+			if (CurrentRoom && Properties->ClearRoomFloor)
+				ClearRoomFloor(CurrentRoom);
+
+			Properties->ClearRoomFloor = false;
+		}
+		else if (Property->GetFName() == "ResetRoomWalls")
+		{
+			// Only reset with an already selected current room
+			if (CurrentRoom && Properties->ResetRoomWalls)
+			{
+				ClearRoomWalls(CurrentRoom);
+				SetRoomWallsDefault(CurrentRoom);
+			}
+			Properties->ResetRoomWalls = false;
+		}
+		else if (Property->GetFName() == "ClearRoomWalls")
+		{
+			// Only reset with an already selected current room
+			if (CurrentRoom && Properties->ClearRoomWalls)
+				ClearRoomWalls(CurrentRoom);
+
+			Properties->ClearRoomWalls = false;
 		}
 	}
 	// Int - RoomSize (X,Y), TileSize, InitHeight
@@ -265,14 +311,8 @@ void UPRG_PluginRoomTool::OnPropertyModified(UObject* PropertySet, FProperty* Pr
 	// Array - SpawnPosition, RoomArray
 	else if (Property->IsA(FArrayProperty::StaticClass()))
 	{
-		// Update the SpawnPosition
-		if (Property->GetFName() == "SpawnPosition")
-		{
-			PRGSettings->SpawnPosition = Properties->SpawnPosition;
-			PRGSettings->MarkPackageDirty();
-		}
 		// Handle interactions with RoomArray
-		else if (Property->GetFName() == "RoomArray")
+		if (Property->GetFName() == "RoomArray")
 		{
 			// 1. Delete all Rooms
 			if (Properties->RoomArray.Num() == 0)
@@ -314,7 +354,7 @@ void UPRG_PluginRoomTool::OnClicked(const FInputDeviceRay& ClickPos)
 		case EEditMode::CreateRooms:
 			Properties->SpawnPosition = Result.ImpactPoint;
 			PRGSettings->SpawnPosition = Properties->SpawnPosition;
-			PRGSettings->MarkPackageDirty();
+			UpdateCreateRoomGizmo(Properties->SpawnPosition);
 			break;
 
 		// Select a room when clicking on a child of a room
@@ -326,13 +366,13 @@ void UPRG_PluginRoomTool::OnClicked(const FInputDeviceRay& ClickPos)
 		// Edit walls in viewport
 		case EEditMode::EditWalls:
 			if (Result.GetActor()->IsA(AWall::StaticClass()))
-				OnClickEditMode(EEditMode::EditWalls, Result, TempWalls, CurrentRoom->GetWalls());
+				OnClickEditModeInteraction(EEditMode::EditWalls, Result, TempWalls, CurrentRoom->GetWalls());
 			break;
 
 		// Edit tiles in viewport
 		case EEditMode::EditTiles:
 			if (Result.GetActor()->IsA(ATile::StaticClass()))
-				OnClickEditMode(EEditMode::EditTiles, Result, TempTiles, CurrentRoom->GetTiles());
+				OnClickEditModeInteraction(EEditMode::EditTiles, Result, TempTiles, CurrentRoom->GetTiles());
 			break;
 
 		// Ignore input for EEditMode::ManageRooms
@@ -350,12 +390,19 @@ void UPRG_PluginRoomTool::OnClicked(const FInputDeviceRay& ClickPos)
 
 TObjectPtr<APRG_Room> UPRG_PluginRoomTool::TryGetCurrentRoom()
 {
-	// If no current room is set, try to assign first in room array
-	if (CurrentRoom == nullptr && Properties->RoomArray.Num() > 0)
+	// If no current room is set
+	if (CurrentRoom == nullptr)
 	{
-		CurrentRoom = Properties->RoomArray[0];
-		CurrentRoom->InitRoom();
-		SetCurrentRoom(CurrentRoom);
+		// Try to recover last room selection
+		if (LastActiveRoom)
+			CurrentRoom = LastActiveRoom;
+		// Take first entry in room array
+		else if (Properties->RoomArray.Num() > 0)
+		{
+			CurrentRoom = Properties->RoomArray[0];
+			CurrentRoom->InitRoom();
+			SetCurrentRoom(CurrentRoom);
+		}
 	}
 
 	// Can still be nullptr
@@ -372,6 +419,9 @@ void UPRG_PluginRoomTool::SetCurrentRoom(TObjectPtr<APRG_Room> SetRoom)
 		CurrentRoom->GetRoomGizmo()->SetVisibility(Properties->ShowAllGizmos);
 	}
 
+	if (CurrentRoom)
+		LastActiveRoom = CurrentRoom;
+
 	CurrentRoom = SetRoom;
 
 	// Set new room state
@@ -383,7 +433,7 @@ void UPRG_PluginRoomTool::SetCurrentRoom(TObjectPtr<APRG_Room> SetRoom)
 			Properties->RoomSize = SetRoom->GetRoomSize();
 			Properties->InitHeight = SetRoom->GetRoomHeight();
 		}
-		CurrentRoom->GetRoomGizmo()->SetVisibility(true);
+		CurrentRoom->GetRoomGizmo()->SetVisibility(Properties->EditMode != EEditMode::CreateRooms);
 		Properties->RoomSelection = SetRoom;
 	}
 }
@@ -410,11 +460,11 @@ void UPRG_PluginRoomTool::SpawnRoom()
 
 	// Spawn new room object
 	const FTransform SpawnLocAndRotation = FTransform(FRotator(0.0f, 0.0f, 0.0f), Properties->SpawnPosition);
-	APRG_Room* NewRoom = TargetWorld->SpawnActorDeferred<APRG_Room>(APRG_Room::StaticClass(), SpawnLocAndRotation);
+	TObjectPtr<APRG_Room> NewRoom = TargetWorld->SpawnActorDeferred<APRG_Room>(APRG_Room::StaticClass(), SpawnLocAndRotation);
 	NewRoom->InitRoom(Properties->RoomSize, Properties->InitHeight);
 	NewRoom->FinishSpawning(SpawnLocAndRotation);
 	NewRoom->OnRoomDeletion.BindUObject(this, &UPRG_PluginRoomTool::DeleteRoomInScene);
-	CreateRoomGizmo(NewRoom, false);
+	CreateCustomRoomGizmo(NewRoom, false);
 
 	// Store room in arrays
 	if (int EmptyIndex = Properties->RoomArray.Find(nullptr))
@@ -426,10 +476,15 @@ void UPRG_PluginRoomTool::SpawnRoom()
 	SetCurrentRoom(NewRoom);
 	RoomArraySize = Properties->RoomArray.Num();
 
-	// Spawn initial room tiles
+	SetRoomFloorDefault(NewRoom);
+	SetRoomWallsDefault(NewRoom);
+}
+
+void UPRG_PluginRoomTool::SetRoomFloorDefault(TObjectPtr<APRG_Room> SetRoom)
+{
 	int SetIndex = 0;
-	int SwitchToHorizonWalls = 0;
 	float OffsetX = 0, OffsetY = 0;
+
 	// Columns
 	for (size_t iY = 0; iY < Properties->RoomSize.Y; iY++)
 	{
@@ -440,14 +495,20 @@ void UPRG_PluginRoomTool::SpawnRoom()
 		{
 			OffsetX = 0.5f * TileSizeCM + TileSizeCM * iX;
 			SetIndex = iX + iY * Properties->RoomSize.X;
-			ATile* NewTile = SpawnTile(*NewRoom, SetIndex, FVector(OffsetX, OffsetY, 0.0f));
-			NewRoom->SetTileAtIndex(SetIndex, NewTile);
+			ATile* NewTile = SpawnTile(*SetRoom, SetIndex, FVector(OffsetX, OffsetY, 0.0f));
+			SetRoom->SetTileAtIndex(SetIndex, NewTile);
 		}
 	}
+}
+
+void UPRG_PluginRoomTool::SetRoomWallsDefault(TObjectPtr<APRG_Room> SetRoom)
+{
+	int SetIndex = 0;
+	float OffsetX = 0, OffsetY = 0;
 
 	// Spawn initial room walls
 	/* Index progression example on a 3x2 grid. First vertical walls, then horizontal walls:
-	 * 
+	 *
 	 *     0       1      2
 	 *  9     10      11     12
 	 *     3       4      5
@@ -456,8 +517,9 @@ void UPRG_PluginRoomTool::SpawnRoom()
 	 */
 	int AddIndex = Properties->RoomSize.X * (Properties->RoomSize.Y + 1);
 	FRotator WallRotation = FRotator(0.0f, 0.0f, 0.0f);
+
 	// Spawn X-aligned walls. Traverse X*(Y+1)
-	// Increments by RoomSize.Y to only spawn the outer edges
+	// Increment by RoomSize.Y to only spawn the outer edges
 	for (size_t iY = 0; iY <= Properties->RoomSize.Y; iY += Properties->RoomSize.Y)
 	{
 		OffsetY = TileSizeCM * iY;
@@ -465,12 +527,13 @@ void UPRG_PluginRoomTool::SpawnRoom()
 		{
 			OffsetX = 0.5f * TileSizeCM + TileSizeCM * iX;
 			SetIndex = iX + iY * Properties->RoomSize.X;
-			AWall* NewWall = SpawnWallRot(*NewRoom, FVector(OffsetX, OffsetY, 0.0f), WallRotation);
-			NewRoom->SetWallAtIndex(SetIndex, NewWall);
+			AWall* NewWall = SpawnWallRot(*SetRoom, FVector(OffsetX, OffsetY, 0.0f), WallRotation);
+			SetRoom->SetWallAtIndex(SetIndex, NewWall);
 		}
 	}
+
 	// Spawn Y-aligned walls. Traverse (X+1)*Y
-	// Increments by RoomSize.X to only spawn the outer edges
+	// Increment by RoomSize.X to only spawn the outer edges
 	WallRotation = FRotator(0.0f, 90.0f, 0.0f);
 	for (size_t iY = 0; iY < Properties->RoomSize.Y; iY++)
 	{
@@ -478,9 +541,37 @@ void UPRG_PluginRoomTool::SpawnRoom()
 		for (size_t iX = 0; iX <= Properties->RoomSize.X; iX += Properties->RoomSize.X)
 		{
 			OffsetX = TileSizeCM * iX;
-			SetIndex = AddIndex + iX + iY * (Properties->RoomSize.X+1);
-			AWall* NewWall = SpawnWallRot(*NewRoom, FVector(OffsetX, OffsetY, 0.0f), WallRotation);
-			NewRoom->SetWallAtIndex(SetIndex, NewWall);
+			SetIndex = AddIndex + iX + iY * (Properties->RoomSize.X + 1);
+			AWall* NewWall = SpawnWallRot(*SetRoom, FVector(OffsetX, OffsetY, 0.0f), WallRotation);
+			SetRoom->SetWallAtIndex(SetIndex, NewWall);
+		}
+	}
+}
+
+void UPRG_PluginRoomTool::ClearRoomFloor(TObjectPtr<APRG_Room> SetRoom)
+{
+	// Clear any old tiles
+	TArray<TObjectPtr<ATile>>& OldTiles = SetRoom->GetTiles();
+	for (size_t i = 0; i < OldTiles.Num(); i++)
+	{
+		if (OldTiles[i])
+		{
+			TargetWorld->DestroyActor(OldTiles[i]);
+			OldTiles[i] = nullptr;
+		}
+	}
+}
+
+void UPRG_PluginRoomTool::ClearRoomWalls(TObjectPtr<APRG_Room> SetRoom)
+{
+	// Clear any old walls
+	TArray<TObjectPtr<AWall>>& OldWalls = SetRoom->GetWalls();
+	for (size_t i = 0; i < OldWalls.Num(); i++)
+	{
+		if (OldWalls[i])
+		{
+			TargetWorld->DestroyActor(OldWalls[i]);
+			OldWalls[i] = nullptr;
 		}
 	}
 }
@@ -499,7 +590,7 @@ void UPRG_PluginRoomTool::SetupFoundRoom(TObjectPtr<APRG_Room> FoundRoom)
 	RoomArraySize = Properties->RoomArray.Num();
 
 	// Create a room gizmo
-	CreateRoomGizmo(FoundRoom, true);
+	CreateCustomRoomGizmo(FoundRoom, true);
 
 	// Recreate room from map in room data
 	TArray<AActor*> ChildActors;
@@ -693,7 +784,7 @@ void UPRG_PluginRoomTool::DeleteRoom(TObjectPtr<APRG_Room> removeRoom)
 	);
 
 	// Remove gizmo from scene
-	removeRoom->DestroyRoomGizmo(GetToolManager()->GetPairedGizmoManager());
+	removeRoom->RemoveRoomGizmo(GetToolManager()->GetPairedGizmoManager());
 
 	RoomArrayCopy.RemoveSingle(removeRoom);
 	TargetWorld->DestroyActor(removeRoom);
@@ -723,7 +814,7 @@ void UPRG_PluginRoomTool::DeleteTempActors()
 
 // ********************************** Gizmo Functions ************************************************
 
-void UPRG_PluginRoomTool::CreateRoomGizmo(TObjectPtr<APRG_Room> room, bool loadTransform)
+void UPRG_PluginRoomTool::CreateCustomRoomGizmo(TObjectPtr<APRG_Room> room, bool loadTransform)
 {
 	FTransform StartTransform = FTransform::Identity;
 
@@ -740,6 +831,10 @@ void UPRG_PluginRoomTool::CreateRoomGizmo(TObjectPtr<APRG_Room> room, bool loadT
 	TransformProxy->SetTransform(StartTransform);
 	TransformGizmo = UE::TransformGizmoUtil::CreateCustomTransformGizmo(GetToolManager()->GetPairedGizmoManager(),
 		ETransformGizmoSubElements::TranslateAllAxes | ETransformGizmoSubElements::TranslateAllPlanes | ETransformGizmoSubElements::RotateAxisZ, this);
+	
+	if (Properties->EditMode == EEditMode::CreateRooms)
+		TransformGizmo->SetVisibility(false);
+	
 	TransformGizmo->SetActiveTarget(TransformProxy, GetToolManager());
 
 	// Listen for changes to the proxy and update the room when that happens
@@ -774,26 +869,41 @@ void UPRG_PluginRoomTool::GizmoTransformChanged(UTransformProxy* Proxy, FTransfo
 		Transform.SetRotation(TransformRot);
 	}
 
-	// Find Room matching activated gizmo
-	for (APRG_Room* FoundRoom : Properties->RoomArray)
+	// Check if able to modify gizmo's
+	if (Properties->EditMode != EEditMode::CreateRooms || Properties->ShowAllGizmos)
 	{
-		if (FoundRoom->GetProxyTransform() == Proxy)
+		// Find Room matching activated gizmo
+		for (APRG_Room* FoundRoom : Properties->RoomArray)
 		{
-			if (FoundRoom != CurrentRoom)
+			if (FoundRoom->GetProxyTransform() == Proxy)
 			{
-				ResetRoomEditMode(Properties->EditMode);
-				SetCurrentRoom(FoundRoom);
-				SetRoomEditMode();
+				if (FoundRoom != CurrentRoom)
+				{
+					ResetRoomEditMode(Properties->EditMode);
+					SetCurrentRoom(FoundRoom);
+					SetRoomEditMode();
+				}
+
+				// Set room as selected actor
+				if (UEditorActorSubsystem* EditorActorSubsystem = GEditor->GetEditorSubsystem<UEditorActorSubsystem>())
+					EditorActorSubsystem->SetSelectedLevelActors({ FoundRoom });
+
+				FoundRoom->SetActorTransform(Transform);
+				FoundRoom->MarkPackageDirty();
+
+				return;
 			}
+		}
+	}
 
-			// Set room as selected actor
-			if (UEditorActorSubsystem* EditorActorSubsystem = GEditor->GetEditorSubsystem<UEditorActorSubsystem>())
-				EditorActorSubsystem->SetSelectedLevelActors({ FoundRoom });
-
-			FoundRoom->SetActorTransform(Transform);
-			FoundRoom->MarkPackageDirty();
-
-			break;
+	// Update SpawnPosition only if not already changing an existing room gizmo
+	if (Properties->EditMode == EEditMode::CreateRooms)
+	{
+		if (SpawnProxy->GetTransform().GetLocation() != Transform.GetLocation())
+		{
+			SpawnProxy->SetTransform(Transform);
+			Properties->SpawnPosition = Transform.GetLocation();
+			PRGSettings->SpawnPosition = Properties->SpawnPosition;
 		}
 	}
 }
@@ -831,7 +941,11 @@ void UPRG_PluginRoomTool::ToggleGizmoVisibility(bool Visible)
 		{
 			APRG_Room* Room = static_cast<APRG_Room*>(Actor);
 			if (CurrentRoom != Room)
+			{
 				Room->GetRoomGizmo()->SetVisibility(Visible);
+				if (Visible)
+					Room->GetRoomGizmo()->SetActiveTarget(Room->GetProxyTransform());
+			}
 		}
 	}
 }
@@ -861,9 +975,19 @@ void UPRG_PluginRoomTool::SetRoomEditMode()
 		{
 			Properties->RoomSize = ActiveRoom->GetRoomSize();
 			Properties->InitHeight = ActiveRoom->GetRoomHeight();
-			Properties->SpawnPosition = ActiveRoom->GetActorLocation();
+			//Properties->SpawnPosition = ActiveRoom->GetActorLocation();
+			ActiveRoom->GetRoomGizmo()->SetVisibility(true);
 		}
 	}
+
+	// Update gizmo's when switching to CreateRooms mode
+	if (Properties->EditMode == EEditMode::CreateRooms)
+	{
+		SetCurrentRoom(nullptr);
+		SpawnCreateRoomGizmo();
+	}
+	else
+		RemoveCreateRoomGizmo();
 
 	// Create or remove the room selection bounding box
 	if (Properties->EditMode == EEditMode::ManageRooms)
@@ -999,6 +1123,41 @@ void UPRG_PluginRoomTool::RemoveRoomBoundingBox()
 	{
 		TargetWorld->DestroyActor(CurrentBoundingBox);
 		CurrentBoundingBox = nullptr;
+	}
+}
+
+void UPRG_PluginRoomTool::SpawnCreateRoomGizmo()
+{
+	// Check if valid mode and whether gizmo already exists
+	if (Properties->EditMode == EEditMode::CreateRooms && !SpawnGizmo)
+	{
+		SpawnProxy = NewObject<UTransformProxy>(this);
+		SpawnProxy->SetTransform(FTransform(Properties->SpawnPosition));
+		SpawnGizmo = UE::TransformGizmoUtil::CreateCustomTransformGizmo(GetToolManager()->GetPairedGizmoManager(),
+			ETransformGizmoSubElements::TranslateAllAxes | ETransformGizmoSubElements::TranslateAllPlanes, this);
+		SpawnGizmo->SetActiveTarget(SpawnProxy, GetToolManager());
+
+		// Listen for changes to the proxy and update the gizmo when that happens
+		SpawnProxy->OnTransformChanged.AddUObject(this, &UPRG_PluginRoomTool::GizmoTransformChanged);
+	}
+}
+
+void UPRG_PluginRoomTool::UpdateCreateRoomGizmo(FVector NewPos)
+{
+	if (Properties->EditMode == EEditMode::CreateRooms && SpawnGizmo)
+	{
+		SpawnGizmo->SetNewGizmoTransform(FTransform(Properties->SpawnPosition));
+	}
+}
+
+void UPRG_PluginRoomTool::RemoveCreateRoomGizmo()
+{
+	if (SpawnGizmo)
+	{
+		GetToolManager()->GetPairedGizmoManager()->DestroyGizmo(SpawnGizmo);
+		SpawnGizmo = nullptr;
+		SpawnProxy->OnTransformChanged.RemoveAll(this);
+		SpawnProxy = nullptr;
 	}
 }
 

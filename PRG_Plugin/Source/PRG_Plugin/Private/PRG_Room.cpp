@@ -86,7 +86,7 @@ TObjectPtr<UTransformProxy> APRG_Room::GetProxyTransform() const
 	return ProxyTransform;
 }
 
-void APRG_Room::DestroyRoomGizmo(UInteractiveGizmoManager* GizmoManager)
+void APRG_Room::RemoveRoomGizmo(UInteractiveGizmoManager* GizmoManager)
 {
 	GizmoManager->DestroyGizmo(StoredGizmo);
 }
