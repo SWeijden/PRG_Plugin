@@ -1,6 +1,6 @@
 # PRG_Plugin
 A procedural room generator plugin for UE5
-Version 1.1
+Version 1.2
 
 ----------------------------------------------------------------------------------------------------------------------
 
@@ -30,6 +30,7 @@ Details about the Edit Modes:
     * Wall and Floor objects change be changed here from their defaults.
   - Manage Rooms:
     * Clicking in the scene will switch selection to another room if part of it.
+  	* Can clear or reset the walls or floors of a room using the toggle in the menu.
 	* Changing the room size will add tiles or remove walls and tiles where appropriate.
 	* Changing the default meshes will cause these to be used when changing the room size.
 	* Rooms can be deleted via the scene or by clearing its Rooms array entry.
@@ -56,12 +57,17 @@ Details about the Edit Modes:
   - Room selection can be switched by clicking on part of a room in the Manage Rooms mode.
   - The default walls and tiles now have 2 materials on each side for easy manipulation.
 
+#### Changes in version 1.2:
+  - Added ability to move any room using their gizmo when ShowAllGizmos is enabled.
+  - Added spawn room marker.
+  - Added resetting or clearing the walls or floors while in EditRoom mode.
+
 #### Known issues:
   - Do not insert items in the Rooms array. This will break the internal state of the tool and may cause a crash on subsequent interactions. Exit / enter the tool again to restore the internal state.
   - Do not delete walls or tiles while inside the tool. This will break the internal state of the tool and will cause a crash when editing walls or tiles of that room. Exit / enter the tool again to restore the internal state.
   - Do not change the content of an item in the room array. This may delete a room and break the internal state of the tool. You can undo the deletion to restore the room and exit / enter the tool again to restore the internal state.
   - Undo/Redo is not yet supported within the tool. Movement and rotation can be reverted as normal, but undoing room creation or deletion will break the internal state of the tool. Exit / enter the tool again to restore the internal state.
-  - Moving rooms without the gizmo is not supported. These changes will revert when afterwards moving the room with the gizmo.
+  - Moving rooms within the tool without using a gizmo is not supported. These changes will revert when moving the room with the gizmo.
 
 #### Lazy workarounds:
 - Room duplication:
@@ -70,7 +76,6 @@ Rooms and their content can be duplicated outside of the tool and will be recogn
 As long as walls and tiles remain within the bounds of the room and are parented to the room, these can be added or removed outside of the tool.
 
 #### Future considerations:
-- Adding a spawn marker for the place where a new room will be created.
 - Change tile size and room height to be set in cm instead of meters.
 - Try to find ways to prevent interactions that will break the tool's internal state.
 
@@ -80,4 +85,4 @@ As long as walls and tiles remain within the bounds of the room and are parented
 The example walls and tiles were made with Blender and their collisions were made using Xavier150's Blender For Unreal addon for Blender.
 This can be used in combination with the Send to Unreal addon from Epic Games to easily transfer meshes with collisions.
 - Blender for Unreal:	https://github.com/xavier150/Blender-For-UnrealEngine-Addons
-- Send to Unreal: https://epicgames.github.io/BlenderTools/send2ue/introduction/quickstart.html
+- Send to Unreal: 	https://epicgames.github.io/BlenderTools/send2ue/introduction/quickstart.html
