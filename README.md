@@ -59,13 +59,13 @@ Details about the Edit Modes:
 
 #### Changes in version 1.2:
   - Added ability to move any room using their gizmo when ShowAllGizmos is enabled.
-  - Added spawn room marker.
-  - Added resetting or clearing the walls or floors while in EditRoom mode.
+  - Added spawn room marker to indicate where a new room will be created.
+  - Added options to reset or clear the walls or floors of a room while in EditRoom mode.
 
 #### Known issues:
-  - Do not insert items in the Rooms array. This will break the internal state of the tool and may cause a crash on subsequent interactions. Exit / enter the tool again to restore the internal state.
-  - Do not delete walls or tiles while inside the tool. This will break the internal state of the tool and will cause a crash when editing walls or tiles of that room. Exit / enter the tool again to restore the internal state.
-  - Do not change the content of an item in the room array. This may delete a room and break the internal state of the tool. You can undo the deletion to restore the room and exit / enter the tool again to restore the internal state.
+  - Do not manually insert items in the Rooms array. This will break the internal state of the tool and may cause a crash on subsequent interactions. Exit / enter the tool again to restore the internal state.
+  - Do not manually delete walls or tiles while inside the tool. This will break the internal state of the tool and will cause a crash when editing walls or tiles of that room. Exit / enter the tool again to restore the internal state.
+  - Do not manually change the content of an item in the room array. This may delete a room and break the internal state of the tool. You can undo the deletion to restore the room and exit / enter the tool again to restore the internal state.
   - Undo/Redo is not yet supported within the tool. Movement and rotation can be reverted as normal, but undoing room creation or deletion will break the internal state of the tool. Exit / enter the tool again to restore the internal state.
   - Moving rooms within the tool without using a gizmo is not supported. These changes will revert when moving the room with the gizmo.
 
