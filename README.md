@@ -1,6 +1,7 @@
 # PRG_Plugin
 A procedural room generator plugin for UE5
 Version 1.2
+Tested with Unreal Engine 5.0 and 5.1
 
 ----------------------------------------------------------------------------------------------------------------------
 
