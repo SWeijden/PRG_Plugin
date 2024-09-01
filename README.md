@@ -70,6 +70,7 @@ Details about the Edit Modes:
   - Fixed an issue when manually deleting a Wall or Tile while using the tool.
   - Fixed issues when manually deleting a room while in Wall or Tile editmode.
   - Fixed cleanup on exiting the tool, so that relevant data is cleared.
+  - Fixed an issue with resetting materials when deleting a smaller room, while in Wall or Tile editmode and then selecting a larger room.
   - Added syncing tool and scene selection of rooms, allowing for easy deletion of rooms.
   - Added checks to trigger execution halt when internal state of tool is broken due to currently unsupported actions such as undoing/redoing room deletion/addition, to inform user to exit and reopen the tool to avoid further issues.
 
