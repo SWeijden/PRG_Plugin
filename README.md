@@ -1,8 +1,7 @@
 # PRG_Plugin
-A procedural room generator plugin for UE5
-Version 1.2
+A procedural room generator plugin for UE5, Version 1.3
 
-Tested with Unreal Engine 5.0 and 5.1
+Tested with Unreal Engine 5.1
 
 ----------------------------------------------------------------------------------------------------------------------
 
@@ -64,22 +63,31 @@ Details about the Edit Modes:
   - Added spawn room marker to indicate where a new room will be created.
   - Added options to reset or clear the walls or floors of a room while in EditRoom mode.
 
+#### Changes in version 1.3:
+  - Fixed an issue when deleting all rooms when a room had been selected, causing a crash when adding a new room.
+  - Fixed potential crash when inserting items into the room array. Now this is treated the same as adding a room.
+  - Fixed an issue with showing new room gizmo when ShowAllGizmo's is on.
+  - Fixed an issue when manually deleting a Wall or Tile while using the tool.
+  - Fixed issues when manually deleting a room while in Wall or Tile editmode.
+  - Fixed cleanup on exiting the tool, so that relevant data is cleared.
+  - Added syncing tool and scene selection of rooms, allowing for easy deletion of rooms.
+  - Added checks to trigger execution halt when internal state of tool is broken due to currently unsupported actions such as undoing/redoing room deletion/addition, to inform user to exit and reopen the tool to avoid further issues.
+
 #### Known issues:
-  - Do not manually insert items in the Rooms array. This will break the internal state of the tool and may cause a crash on subsequent interactions. Exit / enter the tool again to restore the internal state.
-  - Do not manually delete walls or tiles while inside the tool. This will break the internal state of the tool and will cause a crash when editing walls or tiles of that room. Exit / enter the tool again to restore the internal state.
-  - Do not manually change the content of an item in the room array. This may delete a room and break the internal state of the tool. You can undo the deletion to restore the room and exit / enter the tool again to restore the internal state.
-  - Undo/Redo is not yet supported within the tool. Movement and rotation can be reverted as normal, but undoing room creation or deletion will break the internal state of the tool. Exit / enter the tool again to restore the internal state.
+  - Undo/Redo is not (yet) supported within the tool. Movement and rotation can be reverted as normal, but undoing room creation or deletion will break the internal state of the tool. Exit / enter the tool again to restore the internal state.
   - Moving rooms within the tool without using a gizmo is not supported. These changes will revert when moving the room with the gizmo.
 
-#### Lazy workarounds:
+#### Usage tips:
 - Room duplication:
 Rooms and their content can be duplicated outside of the tool and will be recognized upon entering the tool.
 - Walls and tiles duplication:
-As long as walls and tiles remain within the bounds of the room and are parented to the room, these can be added or removed outside of the tool.
+Walls and tiles within a room can be duplicated outside the tool and will be recognized upon entering the tool.
+- Room deletion:
+Rooms can be deleted using the keyboard while using the tool in any edit mode.
 
 #### Future considerations:
 - Change tile size and room height to be set in cm instead of meters.
-- Try to find ways to prevent interactions that will break the tool's internal state.
+- Add support for undo/redo.
 
 ----------------------------------------------------------------------------------------------------------------------
 
