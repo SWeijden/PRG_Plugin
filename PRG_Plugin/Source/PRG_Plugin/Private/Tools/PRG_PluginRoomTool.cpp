@@ -15,6 +15,8 @@
 // localization namespace
 #define LOCTEXT_NAMESPACE "UPRG_PluginRoomTool"
 
+DEFINE_LOG_CATEGORY(LogPRGTool);
+
 ARoomBounds::ARoomBounds()
 {
 	CubeMesh = ConstructorHelpers::FObjectFinder<UStaticMesh>(TEXT("StaticMesh'/Engine/BasicShapes/Cube.Cube'")).Object;
@@ -127,10 +129,6 @@ void UPRG_PluginRoomTool::Setup()
 
 void UPRG_PluginRoomTool::Shutdown(EToolShutdownType ShutdownType)
 {
-	if (LastActiveRoom)
-
-
-
 	DeleteTempActors();
 	ResetPersistMaterials(Properties->EditMode);
 
@@ -138,7 +136,13 @@ void UPRG_PluginRoomTool::Shutdown(EToolShutdownType ShutdownType)
 
 	// Clear delegates of rooms
 	for (APRG_Room* FoundRoom : Properties->RoomArray)
-		FoundRoom->OnRoomDeletion.Unbind();
+	{
+		if (FoundRoom)
+		{
+			FoundRoom->CleanupRoom();
+			FoundRoom->OnRoomDeletion.Unbind();
+		}
+	}
 
 	ResetToolState();
 
@@ -270,7 +274,8 @@ void UPRG_PluginRoomTool::OnPropertyModified(UObject* PropertySet, FProperty* Pr
 			const FObjectProperty* ObjectProperty = static_cast<FObjectProperty*>(Property);
 			if (APRG_Room* SelectedRoom = static_cast<APRG_Room*>(ObjectProperty->GetPropertyValue_InContainer(PropertySet)))
 			{
-				SetCurrentRoom(SelectedRoom);
+				if (!SelectedRoom->IsPendingKill())
+					SetCurrentRoom(SelectedRoom);
 			}
 		}
 		// Apply a new static mesh to CurrentSelectedActorInRoom
@@ -390,18 +395,24 @@ void UPRG_PluginRoomTool::OnClicked(const FInputDeviceRay& ClickPos)
 
 TObjectPtr<APRG_Room> UPRG_PluginRoomTool::TryGetCurrentRoom()
 {
+	if (CurrentRoom && CurrentRoom->IsPendingKill())
+		CurrentRoom = nullptr;
+
 	// If no current room is set
 	if (CurrentRoom == nullptr)
 	{
 		// Try to recover last room selection
-		if (LastActiveRoom)
+		if (LastActiveRoom && !LastActiveRoom->IsPendingKill())
 			CurrentRoom = LastActiveRoom;
-		// Take first entry in room array
+		// Take first entry in room array, if valid
 		else if (Properties->RoomArray.Num() > 0)
 		{
-			CurrentRoom = Properties->RoomArray[0];
-			CurrentRoom->InitRoom();
-			SetCurrentRoom(CurrentRoom);
+			if (Properties->RoomArray[0])
+			{
+				CurrentRoom = Properties->RoomArray[0];
+				CurrentRoom->InitRoom();
+				SetCurrentRoom(CurrentRoom);
+			}
 		}
 	}
 
@@ -412,29 +423,51 @@ TObjectPtr<APRG_Room> UPRG_PluginRoomTool::TryGetCurrentRoom()
 void UPRG_PluginRoomTool::SetCurrentRoom(TObjectPtr<APRG_Room> SetRoom)
 {
 	// Reset current room state
-	if (CurrentRoom)
+	if (CurrentRoom && !CurrentRoom->IsPendingKill())
 	{
+		// Validate room state. Room will be in an invalid state when undoing/redoing a room deletion or creation, which is not (yet) supported.
+		if (!CurrentRoom->GetRoomGizmo())
+		{
+			checkf(false, TEXT("Room in invalid state! Exit the tool and reopen to recover internal state."));
+			return;
+		}
+
 		if (CurrentRoom != SetRoom)
 			RemoveRoomBoundingBox();
-		CurrentRoom->GetRoomGizmo()->SetVisibility(Properties->ShowAllGizmos);
-	}
 
-	if (CurrentRoom)
+		CurrentRoom->GetRoomGizmo()->SetVisibility(Properties->ShowAllGizmos);
+
 		LastActiveRoom = CurrentRoom;
+	}
+	else
+		LastActiveRoom = nullptr;
 
 	CurrentRoom = SetRoom;
 
 	// Set new room state
 	if (SetRoom)
 	{
+		// Validate room state. Room will be in an invalid state when undoing/redoing a room deletion or creation, which is not (yet) supported.
+		if (!SetRoom->GetRoomGizmo())
+		{
+			checkf(false, TEXT("Room in invalid state! Exit the tool and reopen to recover internal state."));
+			return;
+		}
+
 		if (Properties->EditMode == EEditMode::ManageRooms)
 		{
 			SpawnRoomBoundingBox();
 			Properties->RoomSize = SetRoom->GetRoomSize();
 			Properties->InitHeight = SetRoom->GetRoomHeight();
 		}
-		CurrentRoom->GetRoomGizmo()->SetVisibility(Properties->EditMode != EEditMode::CreateRooms);
+
+		SetRoom->GetRoomGizmo()->SetVisibility(Properties->EditMode != EEditMode::CreateRooms || Properties->ShowAllGizmos);
 		Properties->RoomSelection = SetRoom;
+
+#if WITH_EDITOR
+		GEditor->SelectNone(false, true, false);
+		GEditor->SelectActor(SetRoom, true, false, false, true);
+#endif
 	}
 }
 
@@ -455,8 +488,12 @@ void UPRG_PluginRoomTool::FindRoomsInScene()
 
 void UPRG_PluginRoomTool::SpawnRoom()
 {
-	// Validation
-	checkf(RoomArraySize == Properties->RoomArray.Num() - 1, TEXT("RoomArraySize mismatching Properties->RoomArray!"));
+	// Validate room array size to catch if something changed with the array that allows breaking the internal state.
+	if (RoomArraySize != Properties->RoomArray.Num() - 1)
+	{
+		checkf(false, TEXT("RoomArraySize mismatching Properties->RoomArray! Exit the tool and reopen to recover internal state."));
+		return;
+	}
 
 	// Spawn new room object
 	const FTransform SpawnLocAndRotation = FTransform(FRotator(0.0f, 0.0f, 0.0f), Properties->SpawnPosition);
@@ -467,7 +504,8 @@ void UPRG_PluginRoomTool::SpawnRoom()
 	CreateCustomRoomGizmo(NewRoom, false);
 
 	// Store room in arrays
-	if (int EmptyIndex = Properties->RoomArray.Find(nullptr))
+	int EmptyIndex = Properties->RoomArray.Find(nullptr);
+	if (EmptyIndex != INDEX_NONE)
 		Properties->RoomArray[EmptyIndex] = NewRoom;
 	else
 		Properties->RoomArray[RoomArraySize] = NewRoom;
@@ -770,18 +808,11 @@ void UPRG_PluginRoomTool::DeleteRoom(TObjectPtr<APRG_Room> removeRoom)
 		SetCurrentRoom(nullptr);
 
 	RemoveRoomBoundingBox();
+	DeleteTempActors();
 
 	// If an entry was cleared, then delete the empty entry from RoomArray
 	if (RoomArrayCopy.Num() == Properties->RoomArray.Num())
 		Properties->RoomArray.RemoveSingle(nullptr);
-
-	// Remove all children (tiles and walls)
-	removeRoom->ForEachAttachedActors([this](AActor* AttachedActor)
-		{
-			TargetWorld->DestroyActor(AttachedActor);
-			return true;
-		}
-	);
 
 	// Remove gizmo from scene
 	removeRoom->RemoveRoomGizmo(GetToolManager()->GetPairedGizmoManager());
@@ -832,7 +863,7 @@ void UPRG_PluginRoomTool::CreateCustomRoomGizmo(TObjectPtr<APRG_Room> room, bool
 	TransformGizmo = UE::TransformGizmoUtil::CreateCustomTransformGizmo(GetToolManager()->GetPairedGizmoManager(),
 		ETransformGizmoSubElements::TranslateAllAxes | ETransformGizmoSubElements::TranslateAllPlanes | ETransformGizmoSubElements::RotateAxisZ, this);
 	
-	if (Properties->EditMode == EEditMode::CreateRooms)
+	if (Properties->EditMode == EEditMode::CreateRooms && !Properties->ShowAllGizmos)
 		TransformGizmo->SetVisibility(false);
 	
 	TransformGizmo->SetActiveTarget(TransformProxy, GetToolManager());
@@ -875,6 +906,9 @@ void UPRG_PluginRoomTool::GizmoTransformChanged(UTransformProxy* Proxy, FTransfo
 		// Find Room matching activated gizmo
 		for (APRG_Room* FoundRoom : Properties->RoomArray)
 		{
+			if (!FoundRoom)
+				return;
+
 			if (FoundRoom->GetProxyTransform() == Proxy)
 			{
 				if (FoundRoom != CurrentRoom)
@@ -946,6 +980,11 @@ void UPRG_PluginRoomTool::ToggleGizmoVisibility(bool Visible)
 				if (Visible)
 					Room->GetRoomGizmo()->SetActiveTarget(Room->GetProxyTransform());
 			}
+			// Ensure that outside CreateRooms mode the CurrentRoom always has its gizmo
+			else
+			{
+				Room->GetRoomGizmo()->SetVisibility(Properties->EditMode != EEditMode::CreateRooms || Properties->ShowAllGizmos);
+			}
 		}
 	}
 }
@@ -966,16 +1005,34 @@ void UPRG_PluginRoomTool::SetRoomEditMode()
 	// Only spawn temporary actors if there is a room available
 	if (auto ActiveRoom = TryGetCurrentRoom())
 	{
+		if (ActiveRoom->IsPendingKill())
+		{
+			UE_LOG(LogTemp, Warning, TEXT("DEBUGPRINT - PENDING KILL"));
+#if WITH_EDITOR
+			GEditor->SelectNone(false, true, false);
+#endif
+			return;
+		}
+		// Validate room state. Room will be in an invalid state when undoing/redoing a room deletion or creation, which is not (yet) supported.
+		if (!ActiveRoom->GetRoomGizmo())
+		{
+			checkf(false, TEXT("Room in invalid state! Exit the tool and reopen to recover internal state."));
+			return;
+		}
+
 		if (Properties->EditMode == EEditMode::EditWalls)
+		{
 			SetEditModeMaterials(TempWalls, ActiveRoom->GetWalls(), &UPRG_PluginRoomTool::SpawnWall, &APRG_Room::GetWallPositionFromIndex);
+		}
 		else if (Properties->EditMode == EEditMode::EditTiles)
+		{
 			SetEditModeMaterials(TempTiles, ActiveRoom->GetTiles(), &UPRG_PluginRoomTool::SpawnTile, &APRG_Room::GetTilePositionFromIndex);
+		}
 
 		if (Properties->EditMode != EEditMode::CreateRooms)
 		{
 			Properties->RoomSize = ActiveRoom->GetRoomSize();
 			Properties->InitHeight = ActiveRoom->GetRoomHeight();
-			//Properties->SpawnPosition = ActiveRoom->GetActorLocation();
 			ActiveRoom->GetRoomGizmo()->SetVisibility(true);
 		}
 	}

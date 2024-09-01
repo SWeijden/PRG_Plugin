@@ -10,7 +10,7 @@ FPRG_PluginEditorModeCommands::FPRG_PluginEditorModeCommands()
 	: TCommands<FPRG_PluginEditorModeCommands>("PRG_PluginEditorMode",
 		NSLOCTEXT("PRG_PluginEditorMode", "PRG_PluginEditorModeCommands", "PRG_Plugin Editor Mode"),
 		NAME_None,
-		FEditorStyle::GetStyleSetName())
+		FAppStyle::GetAppStyleSetName())
 {
 }
 

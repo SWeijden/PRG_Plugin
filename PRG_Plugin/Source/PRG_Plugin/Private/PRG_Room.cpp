@@ -44,17 +44,40 @@ void APRG_Room::InitRoom(FIntPoint NewSize, int NewHeight)
 	Walls.SetNum((RoomSize.X + 1) * RoomSize.Y + RoomSize.X * (RoomSize.Y + 1), false);
 }
 
+void APRG_Room::CleanupRoom()
+{
+	Tiles.Empty();
+	Walls.Empty();
+	ProxyTransform = nullptr;
+	StoredGizmo = nullptr;
+	OnRoomDeletion.Unbind();
+}
+
 // Called when the game starts or when spawned
 void APRG_Room::BeginPlay()
 {
 	Super::BeginPlay();
-
 }
 
 // Called when this actor is explicitly being destroyed during gameplay or in the editor
 void APRG_Room::Destroyed()
 {
 	OnRoomDeletion.ExecuteIfBound(this);
+	OnRoomDeletion.Unbind();
+
+	for (auto& Tile : Tiles)
+	{
+		if (Tile)
+			Tile->Destroy();
+	}
+	Tiles.Empty();
+
+	for (auto& Wall : Walls)
+	{
+		if (Wall)
+			Wall->Destroy();
+	}
+	Walls.Empty();
 
 	Super::Destroyed();
 }
@@ -89,6 +112,7 @@ TObjectPtr<UTransformProxy> APRG_Room::GetProxyTransform() const
 void APRG_Room::RemoveRoomGizmo(UInteractiveGizmoManager* GizmoManager)
 {
 	GizmoManager->DestroyGizmo(StoredGizmo);
+	StoredGizmo = nullptr;
 }
 
 TArray<TObjectPtr<ATile>>& APRG_Room::GetTiles()

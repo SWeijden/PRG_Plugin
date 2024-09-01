@@ -12,6 +12,8 @@
 
 #include "PRG_PluginRoomTool.generated.h"
 
+DECLARE_LOG_CATEGORY_EXTERN(LogPRGTool, Log, All);
+
 class UCombinedTransformGizmo;
 class UInteractiveGizmo;
 class UTransformProxy;
@@ -97,16 +99,16 @@ public:
 	UPROPERTY(EditAnywhere, Category = "Options", meta = (DisplayName = "Show All Gizmos"))
 	bool ShowAllGizmos;
 	// Reset the floor of a room
-	UPROPERTY(EditAnywhere, Category = "Options|Reset Floor", meta = (DisplayName = "Reset Room Floor", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	UPROPERTY(EditAnywhere, Category = "Options|Reset/Clear Floor", meta = (DisplayName = "Reset Floor", EditCondition = "EditMode == EEditMode::ManageRooms"))
 	bool ResetRoomFloor;
 	// Reset the floor of a room
-	UPROPERTY(EditAnywhere, Category = "Options|Reset Floor", meta = (DisplayName = "Clear Room Floor", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	UPROPERTY(EditAnywhere, Category = "Options|Reset/Clear Floor", meta = (DisplayName = "Clear Floor", EditCondition = "EditMode == EEditMode::ManageRooms"))
 	bool ClearRoomFloor;
 	// Reset the walls of a room
-	UPROPERTY(EditAnywhere, Category = "Options|Reset Walls", meta = (DisplayName = "Reset Room Walls", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	UPROPERTY(EditAnywhere, Category = "Options|Reset/Clear Walls", meta = (DisplayName = "Reset Walls", EditCondition = "EditMode == EEditMode::ManageRooms"))
 	bool ResetRoomWalls;
 	// Reset the walls of a room
-	UPROPERTY(EditAnywhere, Category = "Options|Reset Walls", meta = (DisplayName = "Clear Room Walls", EditCondition = "EditMode == EEditMode::ManageRooms"))
+	UPROPERTY(EditAnywhere, Category = "Options|Reset/Clear Walls", meta = (DisplayName = "Clear Walls", EditCondition = "EditMode == EEditMode::ManageRooms"))
 	bool ClearRoomWalls;
 
 	// Initial room size on spawn
@@ -385,6 +387,18 @@ protected:
 					// Store original materials and change existing material
 					if (PersistArray[i])
 					{
+						if (!PersistArray[i]->GetStaticMeshComponent())
+						{
+							// This can happen if a static mesh was manually deleted in the scene while the tool was open
+							UE_LOG(LogPRGTool, Warning, TEXT("Missing static mesh component detected. Adding TempArray actor to recover internal state."));
+
+							PersistArray[i] = nullptr;
+							// Get position from GetPosFunc, then call SpawnFunc to create actor
+							TempArray[i] = (this->*SpawnFunc)(*ActiveRoom, i, (ActiveRoom->*GetPosFunc)(i, TileSizeCM));
+							StoreOriginalMats(TempArray[i], i, Properties->TempUnselectedMat);
+							continue;
+						}
+
 						StoreOriginalMats(PersistArray[i], i, Properties->PersistUnselectedMat);
 					}
 					// Check to spawn temporary actor and change material

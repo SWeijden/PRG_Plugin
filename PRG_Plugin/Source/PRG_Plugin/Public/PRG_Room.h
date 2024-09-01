@@ -39,6 +39,8 @@ public:
 	APRG_Room();
 	// Must have default ctor for UObject initialization. So set input based init afterwards
 	void InitRoom(FIntPoint NewSize = FIntPoint(0, 0), int NewHeight = 0);
+	// Empty stored data when tool is exited
+	void CleanupRoom();
 
 	// Delegate to handle cleanup of room deletion, if not done via tool
 	FOnRoomDeletionDelegate OnRoomDeletion;
