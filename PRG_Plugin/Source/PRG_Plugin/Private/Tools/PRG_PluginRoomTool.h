@@ -255,7 +255,6 @@ private:
 	void UpdateCreateRoomGizmo(FVector NewPos);
 	void RemoveCreateRoomGizmo();
 
-	// Reset variables to initial tool state
 	void ResetToolState();
 
 protected:
@@ -443,6 +442,8 @@ private:
 	// Array of stored original Materials used in EditMode::EditWalls or EditMode::EditTiles
 	TArray<TArray<TObjectPtr<UMaterial>>> OriginalMaterials;
 
+	// Room used with OriginalMaterials
+	TObjectPtr<APRG_Room> OriginMatRoom = nullptr;
 	// Last active Room
 	TObjectPtr<APRG_Room> LastActiveRoom = nullptr;
 	// Currently active Room

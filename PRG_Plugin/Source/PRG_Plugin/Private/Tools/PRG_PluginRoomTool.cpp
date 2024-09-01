@@ -129,19 +129,13 @@ void UPRG_PluginRoomTool::Setup()
 
 void UPRG_PluginRoomTool::Shutdown(EToolShutdownType ShutdownType)
 {
-	DeleteTempActors();
+	GetToolManager()->GetPairedGizmoManager()->DestroyAllGizmosByOwner(this);
 	ResetPersistMaterials(Properties->EditMode);
 
-	GetToolManager()->GetPairedGizmoManager()->DestroyAllGizmosByOwner(this);
-
-	// Clear delegates of rooms
 	for (APRG_Room* FoundRoom : Properties->RoomArray)
 	{
 		if (FoundRoom)
-		{
 			FoundRoom->CleanupRoom();
-			FoundRoom->OnRoomDeletion.Unbind();
-		}
 	}
 
 	ResetToolState();
@@ -820,6 +814,8 @@ void UPRG_PluginRoomTool::DeleteRoom(TObjectPtr<APRG_Room> removeRoom)
 	RoomArrayCopy.RemoveSingle(removeRoom);
 	TargetWorld->DestroyActor(removeRoom);
 
+	CurrentSelectedActorInRoom = { -1, nullptr };
+
 	RoomArraySize = Properties->RoomArray.Num();
 
 	// Set the first room as selected
@@ -1005,14 +1001,6 @@ void UPRG_PluginRoomTool::SetRoomEditMode()
 	// Only spawn temporary actors if there is a room available
 	if (auto ActiveRoom = TryGetCurrentRoom())
 	{
-		if (ActiveRoom->IsPendingKill())
-		{
-			UE_LOG(LogTemp, Warning, TEXT("DEBUGPRINT - PENDING KILL"));
-#if WITH_EDITOR
-			GEditor->SelectNone(false, true, false);
-#endif
-			return;
-		}
 		// Validate room state. Room will be in an invalid state when undoing/redoing a room deletion or creation, which is not (yet) supported.
 		if (!ActiveRoom->GetRoomGizmo())
 		{
@@ -1083,11 +1071,16 @@ void UPRG_PluginRoomTool::SetArrayMaterials(TObjectPtr<AStaticMeshActor> Actor, 
 void UPRG_PluginRoomTool::ResetPersistMaterials(EEditMode EditMode)
 {
 	// Reset materials based on selected mode
-	if (CurrentRoom)
+	if (CurrentRoom && !CurrentRoom->IsPendingKill())
 	{
 		if (EditMode == EEditMode::EditWalls)
 		{
-			TArray<TObjectPtr<AWall>> Walls = CurrentRoom->GetWalls();
+			TArray<TObjectPtr<AWall>>& Walls = CurrentRoom->GetWalls();
+
+			// Check if room was deleted during edit mode
+			if (Walls.Num() != OriginalMaterials.Num())
+				return;
+
 			for (size_t i = 0; i < Walls.Num(); i++)
 			{
 				if (Walls[i])
@@ -1099,7 +1092,12 @@ void UPRG_PluginRoomTool::ResetPersistMaterials(EEditMode EditMode)
 		}
 		else if (EditMode == EEditMode::EditTiles)
 		{
-			TArray<TObjectPtr<ATile>> Tiles = CurrentRoom->GetTiles();
+			TArray<TObjectPtr<ATile>>& Tiles = CurrentRoom->GetTiles();
+
+			// Check if room was deleted during edit mode
+			if (Tiles.Num() != OriginalMaterials.Num())
+				return;
+
 			for (size_t i = 0; i < Tiles.Num(); i++)
 			{
 				if (Tiles[i])
@@ -1227,6 +1225,12 @@ void UPRG_PluginRoomTool::ResetToolState()
 	CurrentRoom = nullptr;
 	RoomArraySize = 0;
 	RemoveRoomBoundingBox();
+	DeleteTempActors();
+
+	// Clear stored materials
+	for (auto& OrginalMatArray : OriginalMaterials)
+		OrginalMatArray.Empty();
+	OriginalMaterials.Empty();
 }
 
 #undef LOCTEXT_NAMESPACE
